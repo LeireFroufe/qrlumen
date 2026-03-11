@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Coordinate Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <script>
+        // ID único para este dispositivo
+        const deviceId = crypto.randomUUID();
+
+        // Conexión WebSocket al servidor
+        // const socket = new WebSocket("ws://localhost");
+        const socket = new WebSocket("wss://lumen-web-drawing-server-production.up.railway.app/");
+
+        socket.addEventListener("open", () => {
+            // enviar primer mensaje para identificarse como móvil
+            socket.send(JSON.stringify({ role: "mobile", id: deviceId }));
+            console.log("Connected to server as mobile:", deviceId);
+        });
+    </script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+
+        canvas {
+            flex: 1;
+            touch-action: none;
+            background: #f9f9f9;
+            cursor: crosshair;
+        }
+
+        .controls {
+            padding: 10px;
+            background: #eee;
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="controls">
+        <button id="clear">Clear</button>
+        <button id="download">Download Coordinates</button>
+        <button id="downloadImage">Download Image</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        let drawing = false;
+        let points = [];
+        let lastTime = null;
+        let elapsedTime = 0;
+        let lastSent = 0;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - 50;
+        }
+
+        window.addEventListener("resize", resizeCanvas);
+        resizeCanvas();
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const now = Date.now();
+
+            if (lastTime === null) {
+                lastTime = now;
+                elapsedTime = 0;
+            } else {
+                elapsedTime += (now - lastTime);
+                lastTime = now;
+            }
+
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+                t: elapsedTime
+            };
+        }
+
+        function startDraw(e) {
+            drawing = true;
+            lastTime = null;
+            elapsedTime = 0;
+
+            const p = getPos(e);
+            points.push(p);
+
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+
+            // enviar evento start al servidor
+            socket.send(JSON.stringify({ type: "start", id: deviceId }));
+        }
+
+        function draw(e) {
+            if (!drawing) return;
+
+            const p = getPos(e);
+            points.push(p);
+
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+
+            const now = Date.now();
+            if (now - lastSent > 16) { // throttle ~60Hz
+                socket.send(JSON.stringify({
+                    type: "point",
+                    id: deviceId,
+                    x: p.x / canvas.width,
+                    y: p.y / canvas.height,
+                    t: p.t
+                }));
+                lastSent = now;
+            }
+        }
+
+        function endDraw() {
+            if (!drawing) return;
+            drawing = false;
+            ctx.closePath();
+
+            socket.send(JSON.stringify({ type: "end", id: deviceId }));
+        }
+
+        // Eventos mouse
+        canvas.addEventListener("mousedown", startDraw);
+        canvas.addEventListener("mousemove", draw);
+        canvas.addEventListener("mouseup", endDraw);
+        canvas.addEventListener("mouseleave", endDraw);
+
+        // Eventos touch / Apple Pencil
+        canvas.addEventListener("touchstart", e => { e.preventDefault(); startDraw(e.touches[0]); });
+        canvas.addEventListener("touchmove", e => { e.preventDefault(); draw(e.touches[0]); });
+        canvas.addEventListener("touchend", endDraw);
+
+        // Controles
+        document.getElementById("clear").onclick = () => {
+            lastTime = null;
+            elapsedTime = 0;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            points = [];
+        };
+
+        document.getElementById("download").onclick = () => {
+            const coordsBlob = new Blob([JSON.stringify(points, null, 2)], { type: "application/json" });
+            const coordsUrl = URL.createObjectURL(coordsBlob);
+            const coordsLink = document.createElement("a");
+            coordsLink.href = coordsUrl;
+            coordsLink.download = "coordinates.json";
+            coordsLink.click();
+            URL.revokeObjectURL(coordsUrl);
+        };
+
+        document.getElementById("downloadImage").onclick = () => {
+            const tempCanvas = document.createElement("canvas");
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext("2d");
+            tempCtx.fillStyle = "#ffffff";
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.drawImage(canvas, 0, 0);
+            const imageUrl = tempCanvas.toDataURL("image/png");
+            const imageLink = document.createElement("a");
+            imageLink.href = imageUrl;
+            imageLink.download = "drawing.png";
+            imageLink.click();
+        };
+    </script>
+
+</body>
+
+</html>
