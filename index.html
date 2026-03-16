@@ -58,6 +58,7 @@
     <script>
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
+        
 
         let drawing = false;
         let points = [];
@@ -70,10 +71,15 @@
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight - 50;
+            point_index = 0;
+            primitive = 0;
         }
 
         window.addEventListener("resize", resizeCanvas);
         resizeCanvas();
+        const maxDim = Math.max(canvas.width, canvas.height);
+        const invert_origin = Math.min(canvas.width, canvas.height)/Math.max(canvas.width, canvas.height)
+
 
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
@@ -118,14 +124,14 @@
             ctx.stroke();
 
             const now = Date.now();
-            if (now - lastSent > 30) { // throttle ~60Hz
+            if (now - lastSent > 20) { // throttle ~60Hz
                 socket.send(JSON.stringify({
                     type: "point",
                     id: deviceId,
                     primitive_id: String(primitive),
                     point_index: String(point_index),
-                    x: String(p.x / canvas.width),
-                    y: String(1.0 - (p.y / canvas.height)),
+                    x: String(p.x / maxDim),
+                    y: String(invert_origin - (p.y / maxDim)),
                     t: String(p.t)
                 }));
                 lastSent = now;
@@ -162,7 +168,6 @@
             socket.send(JSON.stringify({ type: "clear", id: deviceId }));
             primitive_id = 0;
             point_index = 0;
-
         };
 
         document.getElementById("download").onclick = () => {
