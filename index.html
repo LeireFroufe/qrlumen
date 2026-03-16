@@ -64,6 +64,7 @@
         let lastTime = null;
         let elapsedTime = 0;
         let lastSent = 0;
+        let index = 0;
 
         function resizeCanvas() {
             canvas.width = window.innerWidth;
@@ -96,6 +97,7 @@
             drawing = true;
             lastTime = null;
             elapsedTime = 0;
+            index = 0;
 
             const p = getPos(e);
             points.push(p);
@@ -109,7 +111,6 @@
 
         function draw(e) {
             if (!drawing) return;
-
             const p = getPos(e);
             points.push(p);
 
@@ -117,16 +118,18 @@
             ctx.stroke();
 
             const now = Date.now();
-            if (now - lastSent > 16) { // throttle ~60Hz
+            if (now - lastSent > 30) { // throttle ~60Hz
                 socket.send(JSON.stringify({
                     type: "point",
                     id: deviceId,
-                    x: p.x / canvas.width,
-                    y: p.y / canvas.height,
-                    t: p.t
+                    index: String(index),
+                    x: String(p.x / canvas.width),
+                    y: String(1.0 - (p.y / canvas.height)),
+                    t: String(p.t)
                 }));
                 lastSent = now;
             }
+            index +=1;
         }
 
         function endDraw() {
@@ -134,7 +137,7 @@
             drawing = false;
             ctx.closePath();
 
-            socket.send(JSON.stringify({ type: "end", id: deviceId }));
+            //socket.send(JSON.stringify({ type: "end", id: deviceId }));
         }
 
         // Eventos mouse
