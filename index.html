@@ -63,29 +63,54 @@
             background: rgba(255, 255, 255, 0.18);
         }
 
-        /* Confirm dialog overlay */
-        #overlay {
-            display: none;
+        #help_btn {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 100;
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.06);
+            color: #888;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            font-size: 14px;
+            cursor: pointer;
+            backdrop-filter: blur(6px);
+            transition: background 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s;
+            opacity: 0.4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #help_btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: #ddd;
+            border-color: rgba(255, 255, 255, 0.22);
+            opacity: 1;
+        }
+
+        /* Shared overlay base */
+        .overlay {
             position: fixed;
             inset: 0;
-            z-index: 200;
             background: rgba(0, 0, 0, 0.6);
             backdrop-filter: blur(4px);
             align-items: center;
             justify-content: center;
         }
 
-        #overlay.visible {
-            display: flex;
-            animation: fadeIn 0.15s ease;
-        }
+        .overlay.visible { display: flex; animation: fadeIn 0.18s ease; }
+        .overlay.hidden, .overlay:not(.visible) { display: none; }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: scale(0.97); }
             to   { opacity: 1; transform: scale(1); }
         }
 
-        #dialog {
+        /* Shared dialog box */
+        .dialog-box {
             background: #1a1a1a;
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 12px;
@@ -93,22 +118,23 @@
             width: min(320px, 88vw);
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 18px;
+            position: relative;
         }
 
-        #dialog p {
+        .dialog-box p {
             color: #bbb;
             font-size: 14px;
-            line-height: 1.5;
+            line-height: 1.55;
             text-align: center;
         }
 
-        #dialog .actions {
+        .dialog-box .actions {
             display: flex;
             gap: 10px;
         }
 
-        #dialog button {
+        .dialog-box button {
             flex: 1;
             padding: 9px 0;
             border-radius: 7px;
@@ -118,36 +144,72 @@
             transition: background 0.15s, color 0.15s;
         }
 
+        /* Confirm dialog */
+        #overlay { z-index: 200; }
+
         #btn_cancel {
             background: rgba(255,255,255,0.06);
             color: #888;
             border-color: rgba(255,255,255,0.1);
         }
-
-        #btn_cancel:hover {
-            background: rgba(255,255,255,0.1);
-            color: #bbb;
-        }
+        #btn_cancel:hover { background: rgba(255,255,255,0.1); color: #bbb; }
 
         #btn_confirm {
             background: rgba(220, 80, 80, 0.2);
             color: #e07070;
             border-color: rgba(220, 80, 80, 0.3);
         }
+        #btn_confirm:hover { background: rgba(220, 80, 80, 0.35); color: #f09090; }
 
-        #btn_confirm:hover {
-            background: rgba(220, 80, 80, 0.35);
-            color: #f09090;
+        /* Welcome dialog */
+        #welcome_overlay { z-index: 300; }
+
+        #welcome_close {
+            position: absolute;
+            top: 11px;
+            right: 13px;
+            background: none;
+            border: none;
+            color: #555;
+            font-size: 17px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 2px 5px;
+            transition: color 0.15s;
+        }
+        #welcome_close:hover { color: #aaa; }
+
+        #welcome_dialog p {
+            font-size: 18px;
+            padding: 4px 0 2px;
+        }
+
+        #welcome_hint {
+            color: #484848;
+            font-size: 11px;
+            text-align: center;
+            margin-top: -6px;
         }
     </style>
 </head>
 <body>
 
-    <button id="new_drawing">+ Nuevo dibujo</button>
+    <button id="new_drawing">Nuevo dibujo</button>
+    <button id="help_btn">?</button>
     <canvas id="canvas"></canvas>
 
-    <div id="overlay">
-        <div id="dialog">
+    <!-- Welcome dialog -->
+    <div id="welcome_overlay" class="overlay visible">
+        <div id="welcome_dialog" class="dialog-box">
+            <button id="welcome_close">✕</button>
+            <p>Dibuja tu significado de comunidad</p>
+            <p id="welcome_hint">Toca el lienzo para empezar</p>
+        </div>
+    </div>
+
+    <!-- Confirm new drawing dialog -->
+    <div id="overlay" class="overlay">
+        <div id="dialog" class="dialog-box">
             <p>El dibujo actual se borrará.<br>¿Quieres continuar?</p>
             <div class="actions">
                 <button id="btn_cancel">No, cancelar</button>
@@ -180,6 +242,7 @@
             ctx.lineWidth = 1.8;
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
+            deviceId = crypto.randomUUID();
             point_index = 0;
             primitive = 0;
         }
@@ -190,6 +253,22 @@
         const maxDim = Math.max(canvas.width, canvas.height);
         const invert_origin = Math.min(canvas.width, canvas.height) / Math.max(canvas.width, canvas.height);
 
+        // --- Welcome dialog ---
+        const welcomeOverlay = document.getElementById("welcome_overlay");
+
+        function closeWelcome() {
+            welcomeOverlay.classList.remove("visible");
+            welcomeOverlay.classList.add("hidden");
+        }
+
+        document.getElementById("welcome_close").addEventListener("click", closeWelcome);
+
+        // Close on click outside the welcome dialog box
+        welcomeOverlay.addEventListener("click", e => {
+            if (e.target === welcomeOverlay) closeWelcome();
+        });
+
+        // --- Drawing ---
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
             const now = Date.now();
@@ -199,6 +278,8 @@
         }
 
         function startDraw(e) {
+            // Dismiss welcome dialog if still open
+            if (!welcomeOverlay.classList.contains("hidden")) closeWelcome();
             drawing = true;
             lastTime = null;
             elapsedTime = 0;
@@ -242,10 +323,17 @@
         canvas.addEventListener("mousemove", draw);
         canvas.addEventListener("mouseup", endDraw);
         canvas.addEventListener("mouseleave", endDraw);
-        canvas.addEventListener("touchstart", e => { e.preventDefault(); startDraw(e.touches[0]); });
-        canvas.addEventListener("touchmove", e => { e.preventDefault(); draw(e.touches[0]); });
+        canvas.addEventListener("touchstart", e => { e.preventDefault(); startDraw(e.touches[0]); }, { passive: false });
+        canvas.addEventListener("touchmove", e => { e.preventDefault(); draw(e.touches[0]); }, { passive: false });
         canvas.addEventListener("touchend", endDraw);
 
+        // --- Help button ---
+        document.getElementById("help_btn").onclick = () => {
+            welcomeOverlay.classList.remove("hidden");
+            welcomeOverlay.classList.add("visible");
+        };
+
+        // --- Confirm dialog ---
         const overlay = document.getElementById("overlay");
 
         document.getElementById("new_drawing").onclick = () => {
@@ -268,7 +356,6 @@
             point_index = 0;
         };
 
-        // Close on click outside the dialog
         overlay.addEventListener("click", e => {
             if (e.target === overlay) overlay.classList.remove("visible");
         });
