@@ -7,56 +7,163 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <script>
-        // ID único para este dispositivo
         console.log('redraw');
         var deviceId = crypto.randomUUID();
-
-        // Conexión WebSocket al servidor
-        // const socket = new WebSocket("ws://localhost");
         const socket = new WebSocket("wss://lumen-web-drawing-server-production.up.railway.app/");
-
         socket.addEventListener("open", () => {
-            // enviar primer mensaje para identificarse como móvil
             socket.send(JSON.stringify({ role: "mobile", id: deviceId }));
             console.log("Connected to server as mobile:", deviceId);
         });
     </script>
 
     <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            margin: 0;
+            background: #0d0d0d;
+            overflow: hidden;
             font-family: sans-serif;
-            display: flex;
-            flex-direction: column;
         }
 
         canvas {
-            flex: 1;
+            display: block;
+            width: 100vw;
+            height: 100vh;
             touch-action: none;
-            background: #f9f9f9;
+            background: #111;
             cursor: crosshair;
         }
 
-        .controls {
-            padding: 10px;
-            background: #eee;
+        #new_drawing {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 100;
+            background: rgba(255, 255, 255, 0.06);
+            color: #aaa;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 13px;
+            letter-spacing: 0.03em;
+            cursor: pointer;
+            backdrop-filter: blur(6px);
+            transition: background 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s;
+            opacity: 0.4;
+        }
+
+        #new_drawing:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: #ddd;
+            border-color: rgba(255, 255, 255, 0.22);
+            opacity: 1;
+        }
+
+        #new_drawing:active {
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        /* Confirm dialog overlay */
+        #overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        #overlay.visible {
+            display: flex;
+            animation: fadeIn 0.15s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.97); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+
+        #dialog {
+            background: #1a1a1a;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 24px 28px;
+            width: min(320px, 88vw);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #dialog p {
+            color: #bbb;
+            font-size: 14px;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        #dialog .actions {
             display: flex;
             gap: 10px;
+        }
+
+        #dialog button {
+            flex: 1;
+            padding: 9px 0;
+            border-radius: 7px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        #btn_cancel {
+            background: rgba(255,255,255,0.06);
+            color: #888;
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        #btn_cancel:hover {
+            background: rgba(255,255,255,0.1);
+            color: #bbb;
+        }
+
+        #btn_confirm {
+            background: rgba(220, 80, 80, 0.2);
+            color: #e07070;
+            border-color: rgba(220, 80, 80, 0.3);
+        }
+
+        #btn_confirm:hover {
+            background: rgba(220, 80, 80, 0.35);
+            color: #f09090;
         }
     </style>
 </head>
 <body>
 
-    <div class="controls">
-        <button id="new_drawing">Dibujo nuevo</button>
-    </div>
-
+    <button id="new_drawing">+ Nuevo dibujo</button>
     <canvas id="canvas"></canvas>
+
+    <div id="overlay">
+        <div id="dialog">
+            <p>El dibujo actual se borrará.<br>¿Quieres continuar?</p>
+            <div class="actions">
+                <button id="btn_cancel">No, cancelar</button>
+                <button id="btn_confirm">Sí, borrar</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
-        
+
+        ctx.strokeStyle = "rgba(220, 220, 220, 0.85)";
+        ctx.lineWidth = 1.8;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
 
         let drawing = false;
         let points = [];
@@ -68,48 +175,37 @@
 
         function resizeCanvas() {
             canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight - 50;
+            canvas.height = window.innerHeight;
+            ctx.strokeStyle = "rgba(220, 220, 220, 0.85)";
+            ctx.lineWidth = 1.8;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
             point_index = 0;
             primitive = 0;
         }
 
         window.addEventListener("resize", resizeCanvas);
         resizeCanvas();
-        const maxDim = Math.max(canvas.width, canvas.height);
-        const invert_origin = Math.min(canvas.width, canvas.height)/Math.max(canvas.width, canvas.height)
 
+        const maxDim = Math.max(canvas.width, canvas.height);
+        const invert_origin = Math.min(canvas.width, canvas.height) / Math.max(canvas.width, canvas.height);
 
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
             const now = Date.now();
-
-            if (lastTime === null) {
-                lastTime = now;
-                elapsedTime = 0;
-            } else {
-                elapsedTime += (now - lastTime);
-                lastTime = now;
-            }
-
-            return {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top,
-                t: elapsedTime
-            };
+            if (lastTime === null) { lastTime = now; elapsedTime = 0; }
+            else { elapsedTime += (now - lastTime); lastTime = now; }
+            return { x: e.clientX - rect.left, y: e.clientY - rect.top, t: elapsedTime };
         }
 
         function startDraw(e) {
             drawing = true;
             lastTime = null;
             elapsedTime = 0;
-
             const p = getPos(e);
             points.push(p);
-
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
-
-            // enviar evento start al servidor
             socket.send(JSON.stringify({ type: "start", id: deviceId }));
         }
 
@@ -117,15 +213,12 @@
             if (!drawing) return;
             const p = getPos(e);
             points.push(p);
-
             ctx.lineTo(p.x, p.y);
             ctx.stroke();
-
             const now = Date.now();
-            if (now - lastSent > 20) { // throttle ~60Hz
+            if (now - lastSent > 20) {
                 socket.send(JSON.stringify({
-                    type: "point",
-                    id: deviceId,
+                    type: "point", id: deviceId,
                     primitive_id: String(primitive),
                     point_index: String(point_index),
                     x: String(p.x / maxDim),
@@ -133,7 +226,7 @@
                     t: String(p.t)
                 }));
                 lastSent = now;
-                point_index +=1;
+                point_index += 1;
             }
         }
 
@@ -145,33 +238,41 @@
             socket.send(JSON.stringify({ type: "end", id: deviceId }));
         }
 
-        // Eventos mouse
         canvas.addEventListener("mousedown", startDraw);
         canvas.addEventListener("mousemove", draw);
         canvas.addEventListener("mouseup", endDraw);
         canvas.addEventListener("mouseleave", endDraw);
-
-        // Eventos touch / Apple Pencil
         canvas.addEventListener("touchstart", e => { e.preventDefault(); startDraw(e.touches[0]); });
         canvas.addEventListener("touchmove", e => { e.preventDefault(); draw(e.touches[0]); });
         canvas.addEventListener("touchend", endDraw);
 
-        // Controles
+        const overlay = document.getElementById("overlay");
+
         document.getElementById("new_drawing").onclick = () => {
+            overlay.classList.add("visible");
+        };
+
+        document.getElementById("btn_cancel").onclick = () => {
+            overlay.classList.remove("visible");
+        };
+
+        document.getElementById("btn_confirm").onclick = () => {
+            overlay.classList.remove("visible");
             lastTime = null;
             elapsedTime = 0;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             points = [];
-            socket.send(JSON.stringify({ 
-                type: "clear", 
-                id: deviceId 
-            }));
+            socket.send(JSON.stringify({ type: "clear", id: deviceId }));
             deviceId = crypto.randomUUID();
             primitive = 0;
             point_index = 0;
         };
+
+        // Close on click outside the dialog
+        overlay.addEventListener("click", e => {
+            if (e.target === overlay) overlay.classList.remove("visible");
+        });
     </script>
 
 </body>
-
 </html>
