@@ -8,7 +8,8 @@
 
     <script>
         // ID único para este dispositivo
-        const deviceId = crypto.randomUUID();
+        console.log('redraw');
+        var deviceId = crypto.randomUUID();
 
         // Conexión WebSocket al servidor
         // const socket = new WebSocket("ws://localhost");
@@ -44,13 +45,10 @@
         }
     </style>
 </head>
-
 <body>
 
     <div class="controls">
-        <button id="clear">Clear</button>
-        <button id="download">Download Coordinates</button>
-        <button id="downloadImage">Download Image</button>
+        <button id="new_drawing">Dibujo nuevo</button>
     </div>
 
     <canvas id="canvas"></canvas>
@@ -137,7 +135,6 @@
                 lastSent = now;
                 point_index +=1;
             }
-            
         }
 
         function endDraw() {
@@ -160,39 +157,18 @@
         canvas.addEventListener("touchend", endDraw);
 
         // Controles
-        document.getElementById("clear").onclick = () => {
+        document.getElementById("new_drawing").onclick = () => {
             lastTime = null;
             elapsedTime = 0;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             points = [];
-            socket.send(JSON.stringify({ type: "clear", id: deviceId }));
-            primitive_id = 0;
+            socket.send(JSON.stringify({ 
+                type: "clear", 
+                id: deviceId 
+            }));
+            deviceId = crypto.randomUUID();
+            primitive = 0;
             point_index = 0;
-        };
-
-        document.getElementById("download").onclick = () => {
-            const coordsBlob = new Blob([JSON.stringify(points, null, 2)], { type: "application/json" });
-            const coordsUrl = URL.createObjectURL(coordsBlob);
-            const coordsLink = document.createElement("a");
-            coordsLink.href = coordsUrl;
-            coordsLink.download = "coordinates.json";
-            coordsLink.click();
-            URL.revokeObjectURL(coordsUrl);
-        };
-
-        document.getElementById("downloadImage").onclick = () => {
-            const tempCanvas = document.createElement("canvas");
-            tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height;
-            const tempCtx = tempCanvas.getContext("2d");
-            tempCtx.fillStyle = "#ffffff";
-            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            tempCtx.drawImage(canvas, 0, 0);
-            const imageUrl = tempCanvas.toDataURL("image/png");
-            const imageLink = document.createElement("a");
-            imageLink.href = imageUrl;
-            imageLink.download = "drawing.png";
-            imageLink.click();
         };
     </script>
 
