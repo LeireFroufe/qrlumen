@@ -4,113 +4,86 @@
 <head>
     <meta charset="UTF-8" />
     <title>Coordinate Tracker</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
 
     <script>
-        console.log('redraw');
         var deviceId = crypto.randomUUID();
         const socket = new WebSocket("wss://lumen-web-drawing-server-production.up.railway.app/");
         socket.addEventListener("open", () => {
             socket.send(JSON.stringify({ role: "mobile", id: deviceId }));
-            console.log("Connected to server as mobile:", deviceId);
         });
     </script>
 
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body {
-            background: #0d0d0d;
+        html, body {
+            width: 100%;
+            height: 100%;
+            background: #111;
             overflow: hidden;
-            font-family: sans-serif;
         }
 
         canvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-            touch-action: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             background: #111;
             cursor: crosshair;
         }
 
-        #new_drawing {
+        .fab {
             position: fixed;
             top: 16px;
-            left: 16px;
             z-index: 100;
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(255,255,255,0.06);
             color: #aaa;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255,255,255,0.1);
             border-radius: 8px;
             padding: 8px 14px;
             font-size: 13px;
+            font-family: sans-serif;
             letter-spacing: 0.03em;
             cursor: pointer;
             backdrop-filter: blur(6px);
-            transition: background 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s;
             opacity: 0.4;
+            transition: background 0.2s, color 0.2s, opacity 0.2s;
         }
+        .fab:hover { background: rgba(255,255,255,0.12); color: #ddd; opacity: 1; }
+        .fab:active { background: rgba(255,255,255,0.18); }
 
-        #new_drawing:hover {
-            background: rgba(255, 255, 255, 0.12);
-            color: #ddd;
-            border-color: rgba(255, 255, 255, 0.22);
-            opacity: 1;
-        }
-
-        #new_drawing:active {
-            background: rgba(255, 255, 255, 0.18);
-        }
+        #new_drawing { left: 16px; }
 
         #help_btn {
-            position: fixed;
-            top: 16px;
             right: 16px;
-            z-index: 100;
             width: 32px;
             height: 32px;
-            background: rgba(255, 255, 255, 0.06);
-            color: #888;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0;
             border-radius: 50%;
-            font-size: 14px;
-            cursor: pointer;
-            backdrop-filter: blur(6px);
-            transition: background 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s;
-            opacity: 0.4;
-            display: flex;
+            font-size: 15px;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
         }
 
-        #help_btn:hover {
-            background: rgba(255, 255, 255, 0.12);
-            color: #ddd;
-            border-color: rgba(255, 255, 255, 0.22);
-            opacity: 1;
-        }
-
-        /* Shared overlay base */
-        .overlay {
+        /* Confirm dialog overlay */
+        #confirm_overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.6);
+            z-index: 200;
+            background: rgba(0,0,0,0.65);
             backdrop-filter: blur(4px);
+            display: none;
             align-items: center;
             justify-content: center;
         }
+        #confirm_overlay.show { display: flex; }
 
-        .overlay.visible { display: flex; animation: fadeIn 0.18s ease; }
-        .overlay.hidden, .overlay:not(.visible) { display: none; }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.97); }
-            to   { opacity: 1; transform: scale(1); }
-        }
-
-        /* Shared dialog box */
-        .dialog-box {
+        #confirm_dialog {
             background: #1a1a1a;
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 12px;
@@ -119,22 +92,19 @@
             display: flex;
             flex-direction: column;
             gap: 18px;
-            position: relative;
+            font-family: sans-serif;
         }
 
-        .dialog-box p {
+        #confirm_dialog p {
             color: #bbb;
             font-size: 14px;
             line-height: 1.55;
             text-align: center;
         }
 
-        .dialog-box .actions {
-            display: flex;
-            gap: 10px;
-        }
+        .actions { display: flex; gap: 10px; }
 
-        .dialog-box button {
+        .actions button {
             flex: 1;
             padding: 9px 0;
             border-radius: 7px;
@@ -144,9 +114,6 @@
             transition: background 0.15s, color 0.15s;
         }
 
-        /* Confirm dialog */
-        #overlay { z-index: 200; }
-
         #btn_cancel {
             background: rgba(255,255,255,0.06);
             color: #888;
@@ -155,61 +122,76 @@
         #btn_cancel:hover { background: rgba(255,255,255,0.1); color: #bbb; }
 
         #btn_confirm {
-            background: rgba(220, 80, 80, 0.2);
+            background: rgba(220,80,80,0.2);
             color: #e07070;
-            border-color: rgba(220, 80, 80, 0.3);
+            border-color: rgba(220,80,80,0.3);
         }
-        #btn_confirm:hover { background: rgba(220, 80, 80, 0.35); color: #f09090; }
+        #btn_confirm:hover { background: rgba(220,80,80,0.35); color: #f09090; }
 
-        /* Welcome dialog */
-        #welcome_overlay { z-index: 300; }
-
-        #welcome_close {
-            position: absolute;
-            top: 11px;
-            right: 13px;
-            background: none;
-            border: none;
-            color: #555;
-            font-size: 17px;
-            line-height: 1;
-            cursor: pointer;
-            padding: 2px 5px;
-            transition: color 0.15s;
+        /* Welcome overlay */
+        #welcome_overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        #welcome_close:hover { color: #aaa; }
+
+        #welcome_overlay.hidden {
+            display: none;
+        }
+
+        #welcome_dialog {
+            background: #1a1a1a;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 32px 28px 26px;
+            width: min(320px, 88vw);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
 
         #welcome_dialog p {
-            font-size: 18px;
-            padding: 4px 0 2px;
+            color: #bbb;
+            font-size: 19px;
+            line-height: 1.5;
+            text-align: center;
+            font-family: sans-serif;
         }
 
         #welcome_hint {
             color: #484848;
-            font-size: 11px;
-            text-align: center;
-            margin-top: -6px;
+            font-size: 12px;
+        }
+
+        #welcome_close {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            background: none;
+            border: none;
+            color: #555;
+            font-size: 20px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 6px 8px;
         }
     </style>
 </head>
 <body>
 
-    <button id="new_drawing">Nuevo dibujo</button>
-    <button id="help_btn">?</button>
     <canvas id="canvas"></canvas>
 
-    <!-- Welcome dialog -->
-    <div id="welcome_overlay" class="overlay visible">
-        <div id="welcome_dialog" class="dialog-box">
-            <button id="welcome_close">✕</button>
-            <p>Dibuja tu significado de comunidad</p>
-            <p id="welcome_hint">Toca el lienzo para empezar</p>
-        </div>
-    </div>
+    <button class="fab" id="new_drawing">+ Nuevo dibujo</button>
+    <button class="fab" id="help_btn">?</button>
 
-    <!-- Confirm new drawing dialog -->
-    <div id="overlay" class="overlay">
-        <div id="dialog" class="dialog-box">
+    <div id="confirm_overlay">
+        <div id="confirm_dialog">
             <p>El dibujo actual se borrará.<br>¿Quieres continuar?</p>
             <div class="actions">
                 <button id="btn_cancel">No, cancelar</button>
@@ -218,17 +200,19 @@
         </div>
     </div>
 
+    <div id="welcome_overlay">
+        <div id="welcome_dialog">
+            <button id="welcome_close">✕</button>
+            <p>Dibuja tu significado de comunidad</p>
+            <p id="welcome_hint">Toca el lienzo para empezar</p>
+        </div>
+    </div>
+
     <script>
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
 
-        ctx.strokeStyle = "rgba(220, 220, 220, 0.85)";
-        ctx.lineWidth = 1.8;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
         let drawing = false;
-        let points = [];
         let lastTime = null;
         let elapsedTime = 0;
         let lastSent = 0;
@@ -239,52 +223,43 @@
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             ctx.strokeStyle = "rgba(220, 220, 220, 0.85)";
-            ctx.lineWidth = 1.8;
+            ctx.lineWidth = 2;
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
-            deviceId = crypto.randomUUID();
-            point_index = 0;
-            primitive = 0;
+            // deviceId = crypto.randomUUID();
+            // point_index = 0;
+            // primitive = 0;
+            // socket.send(JSON.stringify({ type: "clear", id: deviceId }));
         }
 
         window.addEventListener("resize", resizeCanvas);
         resizeCanvas();
 
-        const maxDim = Math.max(canvas.width, canvas.height);
-        const invert_origin = Math.min(canvas.width, canvas.height) / Math.max(canvas.width, canvas.height);
-
-        // --- Welcome dialog ---
+        // Welcome dialog
         const welcomeOverlay = document.getElementById("welcome_overlay");
 
         function closeWelcome() {
-            welcomeOverlay.classList.remove("visible");
             welcomeOverlay.classList.add("hidden");
         }
 
-        document.getElementById("welcome_close").addEventListener("click", closeWelcome);
-
-        // Close on click outside the welcome dialog box
         welcomeOverlay.addEventListener("click", e => {
             if (e.target === welcomeOverlay) closeWelcome();
         });
 
-        // --- Drawing ---
+        // Drawing
         function getPos(e) {
-            const rect = canvas.getBoundingClientRect();
             const now = Date.now();
             if (lastTime === null) { lastTime = now; elapsedTime = 0; }
             else { elapsedTime += (now - lastTime); lastTime = now; }
-            return { x: e.clientX - rect.left, y: e.clientY - rect.top, t: elapsedTime };
+            return { x: e.clientX, y: e.clientY, t: elapsedTime };
         }
 
         function startDraw(e) {
-            // Dismiss welcome dialog if still open
-            if (!welcomeOverlay.classList.contains("hidden")) closeWelcome();
+            closeWelcome();
             drawing = true;
             lastTime = null;
             elapsedTime = 0;
             const p = getPos(e);
-            points.push(p);
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
             socket.send(JSON.stringify({ type: "start", id: deviceId }));
@@ -293,11 +268,12 @@
         function draw(e) {
             if (!drawing) return;
             const p = getPos(e);
-            points.push(p);
             ctx.lineTo(p.x, p.y);
             ctx.stroke();
             const now = Date.now();
             if (now - lastSent > 20) {
+                const maxDim = Math.max(canvas.width, canvas.height);
+                const invert_origin = Math.min(canvas.width, canvas.height) / maxDim;
                 socket.send(JSON.stringify({
                     type: "point", id: deviceId,
                     primitive_id: String(primitive),
@@ -323,41 +299,50 @@
         canvas.addEventListener("mousemove", draw);
         canvas.addEventListener("mouseup", endDraw);
         canvas.addEventListener("mouseleave", endDraw);
-        canvas.addEventListener("touchstart", e => { e.preventDefault(); startDraw(e.touches[0]); }, { passive: false });
-        canvas.addEventListener("touchmove", e => { e.preventDefault(); draw(e.touches[0]); }, { passive: false });
-        canvas.addEventListener("touchend", endDraw);
 
-        // --- Help button ---
-        document.getElementById("help_btn").onclick = () => {
-            welcomeOverlay.classList.remove("hidden");
-            welcomeOverlay.classList.add("visible");
-        };
+        document.addEventListener("touchstart", e => { e.preventDefault(); startDraw(e.touches[0]); }, { passive: false });
+        document.addEventListener("touchmove",  e => { e.preventDefault(); draw(e.touches[0]); },      { passive: false });
+        document.addEventListener("touchend",   e => { endDraw(); },                                    { passive: false });
 
-        // --- Confirm dialog ---
-        const overlay = document.getElementById("overlay");
+        // Helper: add both click and touchend to an element
+        function onTap(el, fn) {
+            el.addEventListener("click", fn);
+            el.addEventListener("touchend", e => { e.stopPropagation(); fn(); });
+        }
 
-        document.getElementById("new_drawing").onclick = () => {
-            overlay.classList.add("visible");
-        };
+        // New drawing button
+        const confirmOverlay = document.getElementById("confirm_overlay");
 
-        document.getElementById("btn_cancel").onclick = () => {
-            overlay.classList.remove("visible");
-        };
+        onTap(document.getElementById("new_drawing"), () => {
+            confirmOverlay.classList.add("show");
+        });
 
-        document.getElementById("btn_confirm").onclick = () => {
-            overlay.classList.remove("visible");
-            lastTime = null;
-            elapsedTime = 0;
+        onTap(document.getElementById("btn_cancel"), () => {
+            confirmOverlay.classList.remove("show");
+        });
+
+        onTap(document.getElementById("btn_confirm"), () => {
+            confirmOverlay.classList.remove("show");
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            points = [];
-            socket.send(JSON.stringify({ type: "clear", id: deviceId }));
             deviceId = crypto.randomUUID();
-            primitive = 0;
             point_index = 0;
-        };
+            primitive = 0;
+            socket.send(JSON.stringify({ type: "clear", id: deviceId }));
+        });
 
-        overlay.addEventListener("click", e => {
-            if (e.target === overlay) overlay.classList.remove("visible");
+        confirmOverlay.addEventListener("touchend", e => {
+            if (e.target === confirmOverlay) confirmOverlay.classList.remove("show");
+        });
+
+        // Help button
+        onTap(document.getElementById("help_btn"), () => {
+            welcomeOverlay.classList.remove("hidden");
+        });
+
+        // Welcome close button also needs touch
+        onTap(document.getElementById("welcome_close"), closeWelcome);
+        welcomeOverlay.addEventListener("touchend", e => {
+            if (e.target === welcomeOverlay) closeWelcome();
         });
     </script>
 
